@@ -1,12 +1,12 @@
 import React from 'react';
 import { Navigation } from '@/components/Navigation';
-import { Dashboard as DashboardComponent } from '@/components/Dashboard';
+import BlockchainDashboard from '@/components/BlockchainDashboard';
 
 const Dashboard = () => {
   return (
     <div className="min-h-screen bg-background">
       <Navigation />
-      <DashboardComponent />
+      <BlockchainDashboard />
     </div>
   );
 };
