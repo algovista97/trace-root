@@ -91,6 +91,7 @@ const BlockchainProductRegistration = () => {
           product_name: formData.productName,
           variety: formData.variety,
           quantity: parseInt(formData.quantity),
+          unit: 'kg',
           farmer_id: account,
           farm_location: formData.farmLocation,
           harvest_date: formData.harvestDate,
