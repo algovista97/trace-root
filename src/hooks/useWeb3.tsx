@@ -62,12 +62,13 @@ interface Web3ContextType {
   switchNetwork: (network: keyof typeof NETWORKS) => Promise<void>;
   getNetworkName: () => string;
   registerStakeholder: (role: number, name: string, organization: string) => Promise<void>;
-  registerProduct: (productData: any) => Promise<number>;
+  registerProduct: (productData: any) => Promise<{ productId: number; blockNumber: number; transactionHash: string }>;
   transferProduct: (productId: number, to: string, newStatus: number, location: string, transactionType: string, additionalData: string) => Promise<void>;
   getProduct: (productId: number) => Promise<any>;
   getProductTransactions: (productId: number) => Promise<any[]>;
   getProductsByFarmer: (farmerAddress: string) => Promise<number[]>;
   isProductAuthentic: (productId: number, dataHash: string) => Promise<boolean>;
+  listenForProductRegistered: (callback: (productId: number, farmer: string, blockNumber: number) => void) => (() => void) | undefined;
 }
 
 const Web3Context = createContext<Web3ContextType | undefined>(undefined);
@@ -357,7 +358,7 @@ export const Web3Provider = ({ children }: { children: ReactNode }) => {
     }
   };
 
-  const registerProduct = async (productData: any): Promise<number> => {
+  const registerProduct = async (productData: any): Promise<{ productId: number; blockNumber: number; transactionHash: string }> => {
     if (!contract) throw new Error('Contract not initialized');
 
     try {
@@ -380,9 +381,11 @@ export const Web3Provider = ({ children }: { children: ReactNode }) => {
       
       // Handle both real and mock contracts
       let productId;
+      let blockNumber = receipt.blockNumber || 0;
+      let transactionHash = receipt.hash || tx.hash;
       
       if (receipt.logs && receipt.logs.length > 0) {
-        // Real contract
+        // Real contract - parse ProductRegistered event
         const event = receipt.logs.find((log: any) => {
           try {
             const parsed = contract.interface.parseLog(log);
@@ -394,13 +397,15 @@ export const Web3Provider = ({ children }: { children: ReactNode }) => {
 
         if (event) {
           const parsed = contract.interface.parseLog(event);
-          productId = parsed?.args.productId;
+          productId = Number(parsed?.args.productId);
         } else {
           productId = Math.floor(Math.random() * 10000); // Fallback for demo
         }
       } else {
         // Mock contract
         productId = Math.floor(Math.random() * 10000);
+        blockNumber = Math.floor(Math.random() * 1000000);
+        transactionHash = `0x${Math.random().toString(16).substring(2).padStart(64, '0')}`;
       }
       
       toast({
@@ -408,7 +413,7 @@ export const Web3Provider = ({ children }: { children: ReactNode }) => {
         description: `Product registered on blockchain with ID: ${productId}`,
       });
       
-      return Number(productId);
+      return { productId, blockNumber, transactionHash };
     } catch (error: any) {
       console.error('Error registering product:', error);
       toast({
@@ -506,6 +511,20 @@ export const Web3Provider = ({ children }: { children: ReactNode }) => {
     };
   }, []);
 
+  // Event listener for ProductRegistered events
+  const listenForProductRegistered = (callback: (productId: number, farmer: string, blockNumber: number) => void) => {
+    if (!contract) return;
+
+    const filter = contract.filters.ProductRegistered();
+    contract.on(filter, (productId, name, farmer, harvestDate, event) => {
+      callback(Number(productId), farmer, event.blockNumber);
+    });
+
+    return () => {
+      contract.removeAllListeners(filter);
+    };
+  };
+
   const value: Web3ContextType = {
     account,
     provider,
@@ -515,10 +534,10 @@ export const Web3Provider = ({ children }: { children: ReactNode }) => {
     isConnected,
     isLoading,
     stakeholder,
-  connectWallet,
-  disconnectWallet,
-  switchNetwork,
-  getNetworkName: () => chainId ? getNetworkName(chainId) : 'Not Connected',
+    connectWallet,
+    disconnectWallet,
+    switchNetwork,
+    getNetworkName: () => chainId ? getNetworkName(chainId) : 'Not Connected',
     registerStakeholder,
     registerProduct,
     transferProduct,
@@ -526,6 +545,7 @@ export const Web3Provider = ({ children }: { children: ReactNode }) => {
     getProductTransactions,
     getProductsByFarmer,
     isProductAuthentic,
+    listenForProductRegistered,
   };
 
   return <Web3Context.Provider value={value}>{children}</Web3Context.Provider>;

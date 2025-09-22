@@ -6,13 +6,21 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 import { toast } from '@/hooks/use-toast';
-import { Package, Loader2 } from 'lucide-react';
+import { Package, Loader2, CheckCircle, Clock, AlertCircle } from 'lucide-react';
 import crypto from 'crypto-js';
+
+type RegistrationStatus = 'idle' | 'submitting' | 'confirming' | 'indexing' | 'completed' | 'failed';
 
 const BlockchainProductRegistration = () => {
   const { account, stakeholder, registerProduct, isConnected } = useWeb3();
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [status, setStatus] = useState<RegistrationStatus>('idle');
+  const [productResult, setProductResult] = useState<{
+    productId: number;
+    blockNumber: number;
+    transactionHash: string;
+  } | null>(null);
   const [formData, setFormData] = useState({
     productName: '',
     variety: '',
@@ -63,14 +71,16 @@ const BlockchainProductRegistration = () => {
       return;
     }
 
-    setIsSubmitting(true);
+    setStatus('submitting');
+    setProductResult(null);
 
     try {
       // Generate product hash
       const dataHash = generateProductHash(formData);
       
-      // Register product on blockchain
-      const productId = await registerProduct({
+      // Step 1: Register product on blockchain and wait for confirmation
+      setStatus('confirming');
+      const blockchainResult = await registerProduct({
         name: formData.productName,
         variety: formData.variety,
         quantity: parseInt(formData.quantity),
@@ -80,14 +90,16 @@ const BlockchainProductRegistration = () => {
         dataHash
       });
 
-      // Generate QR code
-      const qrCodeData = generateQRCode(productId);
+      setProductResult(blockchainResult);
 
-      // Store additional data in Supabase for UI purposes
+      // Step 2: Index the product in Supabase database after blockchain confirmation
+      setStatus('indexing');
+      const qrCodeData = generateQRCode(blockchainResult.productId);
+
       const { error: supabaseError } = await supabase
         .from('products')
         .insert({
-          batch_id: `BC-${productId}`,
+          batch_id: `BC-${blockchainResult.productId}`,
           product_name: formData.productName,
           variety: formData.variety,
           quantity: parseInt(formData.quantity),
@@ -98,13 +110,20 @@ const BlockchainProductRegistration = () => {
           quality_grade: formData.qualityGrade,
           status: 'harvested',
           qr_code: qrCodeData,
-          blockchain_hash: dataHash
+          blockchain_hash: blockchainResult.transactionHash
         });
 
       if (supabaseError) {
-        console.warn('Supabase storage failed:', supabaseError);
-        // Don't throw error as blockchain registration was successful
+        console.warn('Supabase indexing failed:', supabaseError);
+        toast({
+          title: "Indexing Warning",
+          description: "Product registered on blockchain but indexing failed. You can still verify on-chain.",
+          variant: "destructive",
+        });
       }
+
+      // Step 3: Mark as completed
+      setStatus('completed');
 
       // Reset form
       setFormData({
@@ -119,18 +138,34 @@ const BlockchainProductRegistration = () => {
 
       toast({
         title: "Success!",
-        description: `Product registered on blockchain with ID: ${productId}`,
+        description: `Product registered and indexed with ID: ${blockchainResult.productId}`,
       });
 
     } catch (error: any) {
       console.error('Registration error:', error);
+      setStatus('failed');
       toast({
         title: "Registration Failed",
         description: error.message || "Failed to register product on blockchain",
         variant: "destructive"
       });
-    } finally {
-      setIsSubmitting(false);
+    }
+  };
+
+  const getStatusInfo = () => {
+    switch (status) {
+      case 'submitting':
+        return { icon: Loader2, text: 'Submitting to blockchain...', color: 'text-blue-500' };
+      case 'confirming':
+        return { icon: Clock, text: 'Waiting for confirmation...', color: 'text-yellow-500' };
+      case 'indexing':
+        return { icon: Loader2, text: 'Indexing product...', color: 'text-blue-500' };
+      case 'completed':
+        return { icon: CheckCircle, text: 'Product registered successfully!', color: 'text-green-500' };
+      case 'failed':
+        return { icon: AlertCircle, text: 'Registration failed', color: 'text-red-500' };
+      default:
+        return null;
     }
   };
 
@@ -191,6 +226,8 @@ const BlockchainProductRegistration = () => {
     );
   }
 
+  const statusInfo = getStatusInfo();
+
   return (
     <Card>
       <CardHeader>
@@ -203,6 +240,31 @@ const BlockchainProductRegistration = () => {
         </CardDescription>
       </CardHeader>
       <CardContent>
+        {/* Status Display */}
+        {statusInfo && (
+          <div className="mb-6 p-4 border rounded-lg bg-muted/50">
+            <div className="flex items-center gap-2">
+              <statusInfo.icon className={`w-4 h-4 ${statusInfo.color} ${status === 'submitting' || status === 'indexing' ? 'animate-spin' : ''}`} />
+              <span className={statusInfo.color}>{statusInfo.text}</span>
+            </div>
+            
+            {productResult && (
+              <div className="mt-3 space-y-2 text-sm">
+                <div>
+                  <span className="font-medium">Product ID:</span> {productResult.productId}
+                </div>
+                <div>
+                  <span className="font-medium">Block Number:</span> {productResult.blockNumber}
+                </div>
+                <div>
+                  <span className="font-medium">Transaction Hash:</span>
+                  <span className="font-mono text-xs break-all ml-1">{productResult.transactionHash}</span>
+                </div>
+              </div>
+            )}
+          </div>
+        )}
+
         <form onSubmit={handleSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div className="space-y-2">
@@ -213,6 +275,7 @@ const BlockchainProductRegistration = () => {
                 onChange={(e) => handleInputChange('productName', e.target.value)}
                 placeholder="e.g., Organic Tomatoes"
                 required
+                disabled={status !== 'idle' && status !== 'failed'}
               />
             </div>
 
@@ -223,6 +286,7 @@ const BlockchainProductRegistration = () => {
                 value={formData.variety}
                 onChange={(e) => handleInputChange('variety', e.target.value)}
                 placeholder="e.g., Cherry Tomatoes"
+                disabled={status !== 'idle' && status !== 'failed'}
               />
             </div>
 
@@ -235,12 +299,17 @@ const BlockchainProductRegistration = () => {
                 onChange={(e) => handleInputChange('quantity', e.target.value)}
                 placeholder="100"
                 required
+                disabled={status !== 'idle' && status !== 'failed'}
               />
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="qualityGrade">Quality Grade</Label>
-              <Select value={formData.qualityGrade} onValueChange={(value) => handleInputChange('qualityGrade', value)}>
+              <Select 
+                value={formData.qualityGrade} 
+                onValueChange={(value) => handleInputChange('qualityGrade', value)}
+                disabled={status !== 'idle' && status !== 'failed'}
+              >
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -260,6 +329,7 @@ const BlockchainProductRegistration = () => {
                 onChange={(e) => handleInputChange('farmLocation', e.target.value)}
                 placeholder="e.g., California, USA"
                 required
+                disabled={status !== 'idle' && status !== 'failed'}
               />
             </div>
 
@@ -271,6 +341,7 @@ const BlockchainProductRegistration = () => {
                 value={formData.harvestDate}
                 onChange={(e) => handleInputChange('harvestDate', e.target.value)}
                 required
+                disabled={status !== 'idle' && status !== 'failed'}
               />
             </div>
           </div>
@@ -282,25 +353,37 @@ const BlockchainProductRegistration = () => {
               value={formData.additionalNotes}
               onChange={(e) => handleInputChange('additionalNotes', e.target.value)}
               placeholder="Any additional information about the product"
+              disabled={status !== 'idle' && status !== 'failed'}
             />
           </div>
 
           <Button
             type="submit"
-            disabled={isSubmitting}
+            disabled={status !== 'idle' && status !== 'failed'}
             className="w-full"
           >
-            {isSubmitting && <Loader2 className="w-4 h-4 mr-2 animate-spin" />}
-            {isSubmitting ? 'Registering on Blockchain...' : 'Register Product on Blockchain'}
+            {(status === 'submitting' || status === 'confirming' || status === 'indexing') && 
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+            }
+            {status === 'idle' || status === 'failed'
+              ? 'Register Product on Blockchain'
+              : status === 'submitting'
+              ? 'Submitting Transaction...'
+              : status === 'confirming'
+              ? 'Confirming on Blockchain...'
+              : status === 'indexing'
+              ? 'Indexing Product...'
+              : 'Product Registered!'
+            }
           </Button>
 
           <div className="text-sm text-muted-foreground bg-muted/50 p-3 rounded-lg">
-            <p><strong>Note:</strong> This action will:</p>
+            <p><strong>Registration Process:</strong></p>
             <ul className="list-disc list-inside mt-1 space-y-1">
-              <li>Record your product permanently on the blockchain</li>
-              <li>Generate a unique product ID and QR code</li>
-              <li>Create an immutable ownership record</li>
-              <li>Require MetaMask transaction approval</li>
+              <li>Submit transaction to blockchain (requires MetaMask approval)</li>
+              <li>Wait for blockchain confirmation</li>  
+              <li>Index product data for fast search</li>
+              <li>Product becomes available for verification and transfers</li>
             </ul>
           </div>
         </form>

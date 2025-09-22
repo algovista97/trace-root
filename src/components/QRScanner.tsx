@@ -27,26 +27,74 @@ export const QRScanner = () => {
   const [transactions, setTransactions] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const { getProductTransactions } = useWeb3();
+  const { getProductTransactions, getProduct, isProductAuthentic } = useWeb3();
 
   const searchProduct = async (searchTerm: string) => {
     setLoading(true);
     setError(null);
 
     try {
-      // Search by batch ID or QR code
+      // Step 1: Try blockchain first (source of truth)
+      let blockchainProduct = null;
+      let indexProduct = null;
+      let verified = false;
+
+      // Extract numeric ID from search term
+      const numericId = parseInt(searchTerm.replace(/^(BC-|AgriChain-)/, '').split('-')[0]);
+      
+      if (numericId && !isNaN(numericId)) {
+        try {
+          blockchainProduct = await getProduct(numericId);
+          if (blockchainProduct && blockchainProduct.exists) {
+            console.log('Found product on blockchain:', blockchainProduct);
+          } else {
+            blockchainProduct = null;
+          }
+        } catch (error) {
+          console.log('Blockchain search failed, trying index:', error);
+        }
+      }
+
+      // Step 2: Search in index for UI data and fast results
       const { data: productData, error: productError } = await supabase
         .from('products')
         .select('*')
-        .or(`batch_id.eq.${searchTerm},qr_code.eq.${searchTerm}`)
+        .or(`batch_id.eq.${searchTerm},qr_code.eq.${searchTerm},batch_id.eq.BC-${numericId}`)
         .single();
 
-      if (productError || !productData) {
+      if (!productError && productData) {
+        indexProduct = productData;
+        
+        // Step 3: Verify index data against blockchain
+        if (blockchainProduct || numericId) {
+          try {
+            verified = await isProductAuthentic(numericId, productData.blockchain_hash);
+          } catch (error) {
+            console.log('Verification failed:', error);
+            verified = false;
+          }
+        }
+      }
+
+      // If we have neither, product doesn't exist
+      if (!blockchainProduct && !indexProduct) {
         setError('Product not found. Please check the ID and try again.');
         setScannedProduct(null);
         setTransactions([]);
         return;
       }
+
+      // Use blockchain data if available, otherwise use index data
+      const productToDisplay = blockchainProduct ? {
+        ...indexProduct,
+        // Merge blockchain data for verified info
+        blockchain_verified: !!blockchainProduct,
+        blockchain_data: blockchainProduct
+      } : {
+        ...indexProduct,
+        blockchain_verified: verified,
+        blockchain_data: null
+      };
 
       // Fetch all transactions for this product
       const { data: transactionData, error: transactionError } = await supabase
@@ -56,20 +104,26 @@ export const QRScanner = () => {
           from_profile:from_stakeholder_id(full_name, role, organization),
           to_profile:to_stakeholder_id(full_name, role, organization)
         `)
-        .eq('product_id', productData.id)
+        .eq('product_id', indexProduct?.id)
         .order('timestamp', { ascending: true });
 
       if (transactionError) {
         console.error('Error fetching transactions:', transactionError);
-        setError('Error loading product history.');
-        return;
       }
 
-      // Get blockchain transactions  
-      const blockchainTransactions = await getProductTransactions(parseInt(productData.batch_id.split('-')[1]) || 1);
+      // Get blockchain transactions if available
+      let blockchainTransactions = [];
+      if (numericId) {
+        try {
+          blockchainTransactions = await getProductTransactions(numericId);
+        } catch (error) {
+          console.log('Failed to fetch blockchain transactions:', error);
+        }
+      }
 
-      setScannedProduct(productData);
+      setScannedProduct(productToDisplay);
       setTransactions(transactionData || []);
+      
     } catch (error) {
       console.error('Search error:', error);
       setError('An error occurred while searching for the product.');
@@ -366,39 +420,64 @@ export const QRScanner = () => {
             </Card>
 
             {/* Blockchain Information */}
-            {scannedProduct.blockchain_hash && (
-              <Card className="border-0 shadow-soft border-blockchain/20 bg-blockchain/5">
-                <CardHeader>
-                  <CardTitle className="flex items-center space-x-2 text-blockchain">
-                    <Shield className="h-5 w-5" />
-                    <span>Blockchain Verification</span>
-                  </CardTitle>
-                  <CardDescription>Immutable record stored on distributed ledger</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid md:grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <p className="font-medium text-foreground">Transaction Hash</p>
-                      <p className="text-muted-foreground font-mono break-all">
-                        {scannedProduct.blockchain_hash}
-                      </p>
-                    </div>
-                    <div>
-                      <p className="font-medium text-foreground">Product ID</p>
-                      <p className="text-muted-foreground">{scannedProduct.batch_id}</p>
-                    </div>
-                    <div>
-                      <p className="font-medium text-foreground">Network</p>
-                      <p className="text-muted-foreground">AgriChain Network</p>
-                    </div>
-                    <div>
-                      <p className="font-medium text-foreground">Status</p>
-                      <p className="text-muted-foreground">Verified</p>
-                    </div>
+            <Card className="border-0 shadow-soft border-blockchain/20 bg-blockchain/5">
+              <CardHeader>
+                <CardTitle className="flex items-center space-x-2 text-blockchain">
+                  <Shield className="h-5 w-5" />
+                  <span>Blockchain Verification</span>
+                  {scannedProduct.blockchain_verified && (
+                    <Badge variant="default" className="ml-2">Verified</Badge>
+                  )}
+                  {!scannedProduct.blockchain_verified && (
+                    <Badge variant="destructive" className="ml-2">Unverified</Badge>
+                  )}
+                </CardTitle>
+                <CardDescription>
+                  {scannedProduct.blockchain_verified 
+                    ? "Product verified on blockchain - immutable record confirmed"
+                    : "Product found in index but blockchain verification failed"
+                  }
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <div className="grid md:grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <p className="font-medium text-foreground">Transaction Hash</p>
+                    <p className="text-muted-foreground font-mono break-all">
+                      {scannedProduct.blockchain_hash || 'Not available'}
+                    </p>
                   </div>
-                </CardContent>
-              </Card>
-            )}
+                  <div>
+                    <p className="font-medium text-foreground">Product ID</p>
+                    <p className="text-muted-foreground">{scannedProduct.batch_id}</p>
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">Source</p>
+                    <p className="text-muted-foreground">
+                      {scannedProduct.blockchain_data ? 'Blockchain + Index' : 'Index Only'}
+                    </p>
+                  </div>
+                  <div>
+                    <p className="font-medium text-foreground">Status</p>
+                    <p className="text-muted-foreground">
+                      {scannedProduct.blockchain_verified ? 'Verified' : 'Unverified'}
+                    </p>
+                  </div>
+                </div>
+                
+                {/* Verify Button */}
+                {!scannedProduct.blockchain_verified && (
+                  <Button
+                    variant="outline"
+                    onClick={() => searchProduct(scannedProduct.batch_id)}
+                    className="w-full mt-4"
+                  >
+                    <Shield className="w-4 h-4 mr-2" />
+                    Verify On-Chain
+                  </Button>
+                )}
+              </CardContent>
+            </Card>
           </div>
         )}
       </div>

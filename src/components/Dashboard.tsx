@@ -8,6 +8,9 @@ import { Button } from '@/components/ui/button';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Loader2 } from 'lucide-react';
 import ProductRegistration from '@/components/ProductRegistration';
+import BlockchainProductRegistration from '@/components/BlockchainProductRegistration';
+import BlockchainProductSearch from '@/components/BlockchainProductSearch';
+import { useProductIndexer } from '@/hooks/useProductIndexer';
 import ProtectedRoute from '@/components/ProtectedRoute';
 import { 
   BarChart3, 
@@ -28,6 +31,9 @@ export const Dashboard = () => {
   const [products, setProducts] = useState([]);
   const [transactions, setTransactions] = useState([]);
   const [activeTab, setActiveTab] = useState('overview');
+  
+  // Initialize product indexer
+  useProductIndexer();
 
   useEffect(() => {
     if (user && profile) {
@@ -140,6 +146,7 @@ export const Dashboard = () => {
             <TabsList>
               <TabsTrigger value="overview">Overview</TabsTrigger>
               {profile?.role === 'farmer' && <TabsTrigger value="register">Register Product</TabsTrigger>}
+              <TabsTrigger value="search">Search Products</TabsTrigger>
               <TabsTrigger value="products">Products</TabsTrigger>
               <TabsTrigger value="transactions">Transactions</TabsTrigger>
             </TabsList>
@@ -209,9 +216,13 @@ export const Dashboard = () => {
 
             {profile?.role === 'farmer' && (
               <TabsContent value="register">
-                <ProductRegistration />
+                <BlockchainProductRegistration />
               </TabsContent>
             )}
+
+            <TabsContent value="search">
+              <BlockchainProductSearch />
+            </TabsContent>
 
             <TabsContent value="products">
               <Card className="border-0 shadow-soft">
