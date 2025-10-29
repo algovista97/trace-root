@@ -203,7 +203,7 @@ const ProductSearchBar = () => {
                   </CardTitle>
                   <div className="flex gap-2">
                     <Badge variant="outline">ID: #{product.id}</Badge>
-                    <Badge className={product.status === 0 ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}>
+                    <Badge variant={product.status === 0 ? 'default' : 'secondary'} className="bg-growth/10 text-growth border-growth/20">
                       {PRODUCT_STATUSES[product.status]}
                     </Badge>
                   </div>

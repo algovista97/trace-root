@@ -233,7 +233,7 @@ const BlockchainDashboard = () => {
                         <CardTitle className="text-lg">
                           {product.name} {product.variety && `(${product.variety})`}
                         </CardTitle>
-                        <Badge className={`${product.status.toLowerCase().includes('harvested') ? 'bg-green-100 text-green-800' : 'bg-blue-100 text-blue-800'}`}>
+                        <Badge variant={product.status.toLowerCase().includes('harvested') ? 'default' : 'secondary'} className="bg-growth/10 text-growth border-growth/20">
                           {product.status}
                         </Badge>
                       </div>

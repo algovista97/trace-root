@@ -155,15 +155,15 @@ const BlockchainProductRegistration = () => {
   const getStatusInfo = () => {
     switch (status) {
       case 'submitting':
-        return { icon: Loader2, text: 'Submitting to blockchain...', color: 'text-blue-500' };
+        return { icon: Loader2, text: 'Submitting to blockchain...', color: 'text-blockchain' };
       case 'confirming':
-        return { icon: Clock, text: 'Waiting for confirmation...', color: 'text-yellow-500' };
+        return { icon: Clock, text: 'Waiting for confirmation...', color: 'text-harvest' };
       case 'indexing':
-        return { icon: Loader2, text: 'Indexing product...', color: 'text-blue-500' };
+        return { icon: Loader2, text: 'Indexing product...', color: 'text-blockchain' };
       case 'completed':
-        return { icon: CheckCircle, text: 'Product registered successfully!', color: 'text-green-500' };
+        return { icon: CheckCircle, text: 'Product registered successfully!', color: 'text-growth' };
       case 'failed':
-        return { icon: AlertCircle, text: 'Registration failed', color: 'text-red-500' };
+        return { icon: AlertCircle, text: 'Registration failed', color: 'text-destructive' };
       default:
         return null;
     }

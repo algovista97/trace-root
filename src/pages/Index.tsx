@@ -114,11 +114,11 @@ const Index = () => {
             through our blockchain-powered platform.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Button size="lg" className="bg-forest hover:bg-forest/90">
+            <Button size="lg" className="bg-forest hover:bg-forest/90" onClick={() => window.location.href = '/dashboard'}>
               Start Tracking Now
             </Button>
-            <Button size="lg" variant="outline">
-              View Demo
+            <Button size="lg" variant="outline" onClick={() => window.location.href = '/scanner'}>
+              Try QR Scanner
             </Button>
           </div>
         </div>
