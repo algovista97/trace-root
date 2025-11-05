@@ -1,4 +1,6 @@
 const hre = require("hardhat");
+const fs = require("fs");
+const path = require("path");
 
 async function main() {
   console.log("🚀 Deploying SupplyChain contract to local network...");
@@ -20,24 +22,26 @@ async function main() {
   console.log("🌐 Network:", hre.network.name);
   console.log("⛽ Gas used: Check transaction receipt");
 
-  // Update the contract address in the frontend
-  console.log("\n🔧 Next steps:");
-  console.log("1. Copy the contract address above");
-  console.log("2. Update CONTRACT_ADDRESSES.localhost in src/hooks/useWeb3.tsx");
-  console.log("3. Restart your frontend development server");
-  console.log("4. Connect MetaMask to localhost:8545");
-  
-  // Save deployment info
+  // Save deployment info to JSON file
   const deploymentInfo = {
+    address: contractAddress,
     network: hre.network.name,
-    contractAddress: contractAddress,
+    deployedAt: new Date().toISOString(),
     deployer: (await hre.ethers.getSigners())[0].address,
-    timestamp: new Date().toISOString(),
     chainId: hre.network.config.chainId
   };
   
+  const deploymentPath = path.join(__dirname, "../src/contracts/deployed-contract.json");
+  fs.writeFileSync(deploymentPath, JSON.stringify(deploymentInfo, null, 2));
+  
+  console.log("\n✅ Contract address saved to src/contracts/deployed-contract.json");
   console.log("\n📋 Deployment Summary:");
   console.log(JSON.stringify(deploymentInfo, null, 2));
+  
+  console.log("\n🔧 Next steps:");
+  console.log("1. Make sure Hardhat node is running (npm run node)");
+  console.log("2. Connect MetaMask to localhost:8545");
+  console.log("3. The frontend will automatically use the new contract address");
 
   return contractAddress;
 }
