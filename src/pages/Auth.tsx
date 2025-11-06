@@ -27,10 +27,10 @@ const Auth = () => {
 
   // Redirect authenticated users to dashboard
   useEffect(() => {
-    if (user) {
+    if (user && !loading) {
       navigate('/dashboard');
     }
-  }, [user, navigate]);
+  }, [user, loading, navigate]);
 
   const handleInputChange = (field: string, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));

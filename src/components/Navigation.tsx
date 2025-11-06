@@ -29,8 +29,9 @@ export const Navigation = () => {
   ];
 
   const handleSignOut = async () => {
+    setIsOpen(false);
     await signOut();
-    navigate('/');
+    navigate('/auth');
   };
 
   return (
