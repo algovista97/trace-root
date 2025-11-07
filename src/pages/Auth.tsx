@@ -89,15 +89,21 @@ const Auth = () => {
       }
 
       if (data?.user) {
-        toast({
-          title: "Success!",
-          description: "Account created successfully. You can now sign in.",
-        });
-        
-        // Auto sign-in after successful signup
-        setTimeout(() => {
-          navigate('/dashboard');
-        }, 500);
+        // Check if user has a session (auto-confirmed) or needs email confirmation
+        if (data.session) {
+          toast({
+            title: "Success!",
+            description: "Account created successfully. Signing you in...",
+          });
+          setTimeout(() => {
+            navigate('/dashboard');
+          }, 500);
+        } else {
+          toast({
+            title: "Check your email",
+            description: "Please confirm your email address to complete registration. Then you can sign in.",
+          });
+        }
       }
     } catch (error: any) {
       console.error('Unexpected signup error:', error);
