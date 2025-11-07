@@ -93,15 +93,27 @@ const Auth = () => {
         if (data.session) {
           toast({
             title: "Success!",
-            description: "Account created successfully. Signing you in...",
+            description: "Account created and logged in successfully!",
           });
           setTimeout(() => {
             navigate('/dashboard');
           }, 500);
         } else {
+          // Email confirmation is required
           toast({
-            title: "Check your email",
-            description: "Please confirm your email address to complete registration. Then you can sign in.",
+            title: "Almost there!",
+            description: "Please check your email and click the confirmation link. Email confirmation is required before you can sign in.",
+            duration: 8000,
+          });
+          // Clear the form
+          setFormData({
+            email: '',
+            password: '',
+            fullName: '',
+            role: '',
+            organization: '',
+            location: '',
+            phone: ''
           });
         }
       }
@@ -140,10 +152,20 @@ const Auth = () => {
 
       if (error) {
         console.error('Sign in error:', error);
+        
+        // Check if it's an email confirmation issue
+        let errorMessage = error.message || "Invalid email or password. Please try again.";
+        if (error.message?.includes('Email not confirmed') || error.code === 'email_not_confirmed') {
+          errorMessage = "Please confirm your email address before signing in. Check your inbox for the confirmation link.";
+        } else if (error.message?.includes('Invalid login credentials')) {
+          errorMessage = "Invalid email or password. If you just signed up, please confirm your email first.";
+        }
+        
         toast({
           title: "Login Error",
-          description: error.message || "Invalid email or password. Please try again.",
+          description: errorMessage,
           variant: "destructive",
+          duration: 6000,
         });
         setLoading(false);
         return;
